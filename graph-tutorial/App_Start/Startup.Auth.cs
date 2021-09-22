@@ -25,7 +25,7 @@ namespace graph_tutorial
         private static string appSecret = ConfigurationManager.AppSettings["ida:ClientSecret"];
         private static string redirectUri = ConfigurationManager.AppSettings["ida:RedirectUri"];
         private static string graphScopes = ConfigurationManager.AppSettings["ida:AppScopes"];
-
+public const string BasicSignInScopes = "openid profile offline_access";
         public void ConfigureAuth(IAppBuilder app)
         {
             app.SetDefaultSignInAsAuthenticationType(CookieAuthenticationDefaults.AuthenticationType);
@@ -37,14 +37,14 @@ namespace graph_tutorial
                 {
                     ClientId = appId,
                     Authority = "https://login.microsoftonline.com/dc6df0e3-1692-4482-aa55-729e0a5e8361/v2.0",
-                    Scope = $"openid email profile offline_access {graphScopes}",
+                    Scope = BasicSignInScopes + " User.Read.All",
                     RedirectUri = redirectUri,
                     PostLogoutRedirectUri = redirectUri,
                     TokenValidationParameters = new TokenValidationParameters
                     {
                         // For demo purposes only, see below
                         ValidateIssuer = false
-
+                        NameClaimType = "name",
                         // In a real multi-tenant app, you would add logic to determine whether the
                         // issuer was from an authorized tenant
                         //ValidateIssuer = true,
