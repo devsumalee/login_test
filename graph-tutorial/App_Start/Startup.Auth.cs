@@ -18,81 +18,86 @@ using System.Security.Claims;
 
 namespace graph_tutorial
 {
-    public partial class Startup
+    public class Startup
     {
-        // Load configuration settings from PrivateSettings.config
-        private static string appId = ConfigurationManager.AppSettings["ida:ClientId"];
-        private static string appSecret = ConfigurationManager.AppSettings["ida:ClientSecret"];
-        private static string redirectUri = ConfigurationManager.AppSettings["ida:RedirectUri"];
-        private static string graphScopes = ConfigurationManager.AppSettings["ida:AppScopes"];
-public const string BasicSignInScopes = "openid profile offline_access";
-        public void ConfigureAuth(IAppBuilder app)
+        // The Client ID is used by the application to uniquely identify itself to Azure AD.
+        string clientId = System.Configuration.ConfigurationManager.AppSettings["ClientId"];
+        string Secret = System.Configuration.ConfigurationManager.AppSettings["Secret"];
+        // RedirectUri is the URL where the user will be redirected to after they sign in.
+        string redirectUri = System.Configuration.ConfigurationManager.AppSettings["RedirectUri"];
+        string graphScopes = System.Configuration.ConfigurationManager.AppSettings["AppScopes"];
+        // Tenant is the tenant ID (e.g. contoso.onmicrosoft.com, or 'common' for multi-tenant)
+        static string tenant = System.Configuration.ConfigurationManager.AppSettings["Tenant"];
+
+    // Authority is the URL for authority, composed by Microsoft identity platform endpoint and the tenant name (e.g. https://login.microsoftonline.com/contoso.onmicrosoft.com/v2.0)
+    string authority = String.Format(System.Globalization.CultureInfo.InvariantCulture, System.Configuration.ConfigurationManager.AppSettings["Authority"], tenant);
+
+  public void Configuration(IAppBuilder app)
+    {
+        app.SetDefaultSignInAsAuthenticationType(CookieAuthenticationDefaults.AuthenticationType);
+
+        app.UseCookieAuthentication(new CookieAuthenticationOptions());
+        app.UseOpenIdConnectAuthentication(
+        new OpenIdConnectAuthenticationOptions
         {
-            app.SetDefaultSignInAsAuthenticationType(CookieAuthenticationDefaults.AuthenticationType);
-
-            app.UseCookieAuthentication(new CookieAuthenticationOptions());
-
-            app.UseOpenIdConnectAuthentication(
-                new OpenIdConnectAuthenticationOptions
-                {
-                    ClientId = appId,
-                    Authority = "https://login.microsoftonline.com/dc6df0e3-1692-4482-aa55-729e0a5e8361/v2.0",
-                    Scope = BasicSignInScopes + " User.Read.All",
-                    RedirectUri = redirectUri,
-                    PostLogoutRedirectUri = redirectUri,
-                    TokenValidationParameters = new TokenValidationParameters
-                    {
-                        // For demo purposes only, see below
-                        ValidateIssuer = false
-                        NameClaimType = "name",
-                        // In a real multi-tenant app, you would add logic to determine whether the
-                        // issuer was from an authorized tenant
-                        //ValidateIssuer = true,
-                        //IssuerValidator = (issuer, token, tvp) =>
-                        //{
-                        //  if (MyCustomTenantValidation(issuer))
-                        //  {
-                        //    return issuer;
-                        //  }
-                        //  else
-                        //  {
-                        //    throw new SecurityTokenInvalidIssuerException("Invalid issuer");
-                        //  }
-                        //}
-                    },
-                    Notifications = new OpenIdConnectAuthenticationNotifications
-                    {
-                        AuthenticationFailed = OnAuthenticationFailedAsync,
-                        AuthorizationCodeReceived = OnAuthorizationCodeReceivedAsync
-                    }
-                }
-            );
-        }
-
-        private static Task OnAuthenticationFailedAsync(AuthenticationFailedNotification<OpenIdConnectMessage,
-            OpenIdConnectAuthenticationOptions> notification)
-        {
-            notification.HandleResponse();
-            string redirect = $"/Home/Error?message={notification.Exception.Message}";
-            if (notification.ProtocolMessage != null && !string.IsNullOrEmpty(notification.ProtocolMessage.ErrorDescription))
+           
+                ClientId = clientId,
+            Authority = authority,
+            RedirectUri = redirectUri,
+                PostLogoutRedirectUri = redirectUri,
+            //Scope = OpenIdConnectScope.OpenIdProfile,
+           Scope = $"openid profile offline_access {graphScopes}",
+            ResponseType = OpenIdConnectResponseType.CodeIdToken,
+            TokenValidationParameters = new TokenValidationParameters
             {
-                redirect += $"&debug={notification.ProtocolMessage.ErrorDescription}";
-            }
-            notification.Response.Redirect(redirect);
-            return Task.FromResult(0);
-        }
+                //    // For demo purposes only, see below
+                ValidateIssuer = false
+            },
+            Notifications = new OpenIdConnectAuthenticationNotifications
+            {
+                AuthenticationFailed = OnAuthenticationFailed,
 
+                AuthorizationCodeReceived = OnAuthorizationCodeReceivedAsync
+            }
+        }
+    );
+    }
+
+    /// <summary>
+    /// Handle failed authentication requests by redirecting the user to the home page with an error in the query string
+    /// </summary>
+    /// <param name="context"></param>
+    /// <returns></returns>
+    private Task OnAuthenticationFailed(AuthenticationFailedNotification<OpenIdConnectMessage, OpenIdConnectAuthenticationOptions> context)
+    {
+            if (context.Exception.Message.Contains("IDX21323"))
+            {
+                context.HandleResponse();
+                context.OwinContext.Authentication.Challenge();
+         
+            //context.HandleResponse();
+        context.Response.Redirect("/?errormessage1=" + context.Exception.Message);   
+            }
+        return Task.FromResult(0);
+    }
         private async Task OnAuthorizationCodeReceivedAsync(AuthorizationCodeReceivedNotification notification)
         {
             notification.HandleCodeRedemption();
 
-            var idClient = ConfidentialClientApplicationBuilder.Create(appId)
-                .WithRedirectUri(redirectUri)
-                .WithClientSecret(appSecret)
-                .Build();
 
-            var signedInUser = new ClaimsPrincipal(notification.AuthenticationTicket.Identity);
-            var tokenStore = new SessionTokenStore(idClient.UserTokenCache, HttpContext.Current, signedInUser);
+            //IConfidentialClientApplication clientApp = MsalAppBuilder.BuildConfidentialClientApplication();
+            //AuthenticationResult result = await clientApp.AcquireTokenByAuthorizationCode(new[] { "Mail.Read" }, notification.Code).ExecuteAsync();
+
+
+
+            IConfidentialClientApplication idClient = ConfidentialClientApplicationBuilder.Create(clientId)
+                .WithRedirectUri(redirectUri)
+                .WithClientSecret(Secret)
+                .WithAuthority(new Uri(authority))
+                 .Build();
+
+            ////var signedInUser = new ClaimsPrincipal(notification.AuthenticationTicket.Identity);
+            ////var tokenStore = new SessionTokenStore(idClient.UserTokenCache, HttpContext.Current, signedInUser);
 
             try
             {
@@ -100,24 +105,16 @@ public const string BasicSignInScopes = "openid profile offline_access";
 
                 var result = await idClient.AcquireTokenByAuthorizationCode(
                     scopes, notification.Code).ExecuteAsync();
+                notification.Response.Redirect($"/Home/Error?errormessage1={result}&debug={1}");
 
-                var userDetails = await GraphHelper.GetUserDetailsAsync(result.AccessToken);
-
-                tokenStore.SaveUserDetails(userDetails);
-                notification.HandleCodeRedemption(null, result.IdToken);
             }
             catch (MsalException ex)
             {
                 string message = "AcquireTokenByAuthorizationCodeAsync threw an exception";
                 notification.HandleResponse();
-                notification.Response.Redirect($"/Home/Error?message={message}&debug={ex.Message}");
+                notification.Response.Redirect($"/Home/Error?errormessage1={message}&debug={ex.Message}");
             }
-            catch (Microsoft.Graph.ServiceException ex)
-            {
-                string message = "GetUserDetailsAsync threw an exception";
-                notification.HandleResponse();
-                notification.Response.Redirect($"/Home/Error?message={message}&debug={ex.Message}");
-            }
+
         }
     }
 }
