@@ -45,7 +45,7 @@ namespace graph_tutorial
             Authority = authority,
             RedirectUri = redirectUri,
                 PostLogoutRedirectUri = redirectUri,
-            //Scope = OpenIdConnectScope.OpenIdProfile,
+           
            Scope = $"openid profile offline_access {graphScopes}",
             ResponseType = OpenIdConnectResponseType.CodeIdToken,
             TokenValidationParameters = new TokenValidationParameters
@@ -83,11 +83,6 @@ namespace graph_tutorial
         private async Task OnAuthorizationCodeReceivedAsync(AuthorizationCodeReceivedNotification notification)
         {
             notification.HandleCodeRedemption();
-
-
-            //IConfidentialClientApplication clientApp = MsalAppBuilder.BuildConfidentialClientApplication();
-            //AuthenticationResult result = await clientApp.AcquireTokenByAuthorizationCode(new[] { "Mail.Read" }, notification.Code).ExecuteAsync();
-
 
 
             IConfidentialClientApplication idClient = ConfidentialClientApplicationBuilder.Create(clientId)
